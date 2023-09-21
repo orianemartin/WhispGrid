@@ -3,3 +3,5 @@ A little script to use OpenAI's [Whisper](https://github.com/openai/whisper) and
 Any model can be used, but I use [bofenghuang](https://huggingface.co/bofenghuang/whisper-medium-french]) fine-tuned model for French.
 
 This script uses [Whisper Timestamped](https://github.com/linto-ai/whisper-timestamped) to align words and sentences, and uses two Tiers. 
+
+WhispGrid supports multiple files. 
