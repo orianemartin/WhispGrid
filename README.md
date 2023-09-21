@@ -4,4 +4,7 @@ The app lets you choose a model from the basic OpenAI Model, or let you enter th
 
 This script uses [Whisper Timestamped](https://github.com/linto-ai/whisper-timestamped) to align words and sentences, and uses two Tiers, one for segments and one for words.
 
-WhispGrid supports multiple files. 
+## Functionalities and limitations
+
+WhispGrid supports multiple files, but has a limit of 25MB per file (defined by Whisper's API).
+
