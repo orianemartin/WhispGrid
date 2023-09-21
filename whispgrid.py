@@ -5,8 +5,6 @@ import tkinter as tk
 from tkinter import filedialog
 import os
 import threading
-import tkinter.messagebox as messagebox
-
 
 def select_audio_files():
     file_paths = filedialog.askopenfilenames(filetypes=[("Audio files", "*.wav;*.mp3;*.mp4;*.mpeg;*.mpga;*.m4a;*.webm;*.flac;*.ogg")])
@@ -16,7 +14,6 @@ def select_audio_files():
 
 def transcribe_audios():
     selected_files = audio_listbox.get(0, tk.END)
-    base_output_name = output_entry.get()
 
     # Disable the "Transcribe" button while processing
     transcribe_button.config(state=tk.DISABLED)
@@ -33,16 +30,18 @@ def transcribe_audios():
     # Create a thread for each audio file to transcribe in the background
     transcription_threads = []
     for audio_path in selected_files:
-        transcription_thread = threading.Thread(target=lambda path=audio_path, output_name=base_output_name, threads=transcription_threads: transcribe_audio_thread(path, output_name, threads))
+        transcription_thread = threading.Thread(target=transcribe_audio_thread, args=(audio_path, on_transcription_completed, transcription_threads))
         transcription_threads.append(transcription_thread)
         transcription_thread.start()
 
-def transcribe_audio_thread(audio_path, output_name, transcription_threads):
+def transcribe_audio_thread(audio_path, on_transcription_completed, transcription_threads):
     # Load audio
     audio = whisper.load_audio(audio_path)
 
     # Load a whisper model
-    model = whisper.load_model("bofenghuang/whisper-medium-french ", device="cpu")
+    # Fine-tuned for French
+    #model = whisper.load_model("bofenghuang/whisper-medium-french", device="cpu")
+    model = whisper.load_model("tiny", device="cpu")
 
     # Transcribe and fine-tune
     result = whisper.transcribe(
@@ -93,14 +92,10 @@ def transcribe_audio_thread(audio_path, output_name, transcription_threads):
         on_transcription_completed()
 
 def notify_transcription_complete(audio_path):
-     # Show a popup message
-    messagebox.showinfo("Transcription Complete", f"Transcription complete for {audio_path}")
-    
-    # Clear the listbox
-    audio_listbox.delete(0, tk.END)
-    
-    # Re-enable the "Transcribe" button
-    transcribe_button.config(state=tk.NORMAL)
+    # Update the GUI to notify the user that transcription is complete
+    audio_listbox.selection_clear(0, tk.END)
+    audio_listbox.insert(tk.END, f"Transcription complete: {audio_path}")
+    audio_listbox.see(tk.END)
 
 # Create the main application window
 app = tk.Tk()
@@ -110,11 +105,8 @@ app.title("WhispGrid")
 audio_label = tk.Label(app, text="Select Audio Files:")
 audio_label.pack()
 
-audio_listbox = tk.Listbox(app, selectmode=tk.MULTIPLE, width=50)
+audio_listbox = tk.Listbox(app, selectmode=tk.MULTIPLE, width=100)
 audio_listbox.pack()
-
-output_entry = tk.Entry(app, width=50)
-output_entry.pack()
 
 # Create buttons
 select_button = tk.Button(app, text="Select Audio Files", command=select_audio_files)
