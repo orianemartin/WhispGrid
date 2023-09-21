@@ -2,48 +2,56 @@ import whisper_timestamped as whisper
 import tgt
 import json
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, StringVar, OptionMenu, messagebox, ttk
+from tkinter.simpledialog import askstring
+import sv_ttk
 import os
 import threading
+
+predefined_models = ["tiny", "small", "base", "medium", "large", "bofenghuang/whisper-medium-french"]
 
 def select_audio_files():
     file_paths = filedialog.askopenfilenames(filetypes=[("Audio files", "*.wav;*.mp3;*.mp4;*.mpeg;*.mpga;*.m4a;*.webm;*.flac;*.ogg")])
     for file_path in file_paths:
         audio_listbox.insert(tk.END, file_path)
 
-
 def transcribe_audios():
     selected_files = audio_listbox.get(0, tk.END)
+    selected_model = model_var.get()
 
-    # Disable the "Transcribe" button while processing
+    if selected_model == "other":
+        custom_model = askstring("Custom Model", "Enter a custom model name:")
+        if custom_model is None:
+            return
+        selected_model = custom_model
+
     transcribe_button.config(state=tk.DISABLED)
 
     def on_transcription_completed():
-        # Notify the user that batch transcription is complete
-        audio_listbox.insert(tk.END, "Batch transcription complete")
+        messagebox.showinfo("Transcription Complete", "Batch transcription complete")
         audio_listbox.see(tk.END)
-        # Clear the listbox
         audio_listbox.delete(0, tk.END)
-        # Re-enable the "Transcribe" button
         transcribe_button.config(state=tk.NORMAL)
 
-    # Create a thread for each audio file to transcribe in the background
     transcription_threads = []
     for audio_path in selected_files:
-        transcription_thread = threading.Thread(target=transcribe_audio_thread, args=(audio_path, on_transcription_completed, transcription_threads))
+        transcription_thread = threading.Thread(target=transcribe_audio_thread, args=(audio_path, selected_model, on_transcription_completed, transcription_threads))
         transcription_threads.append(transcription_thread)
         transcription_thread.start()
 
-def transcribe_audio_thread(audio_path, on_transcription_completed, transcription_threads):
-    # Load audio
+    def check_transcription_completion():
+        if all(not thread.is_alive() for thread in transcription_threads):
+            on_transcription_completed()
+        else:
+            app.after(1000, check_transcription_completion)
+
+    check_transcription_completion()
+
+def transcribe_audio_thread(audio_path, selected_model, on_transcription_completed, transcription_threads):
     audio = whisper.load_audio(audio_path)
 
-    # Load a whisper model
-    # Fine-tuned for French
-    #model = whisper.load_model("bofenghuang/whisper-medium-french", device="cpu")
-    model = whisper.load_model("tiny", device="cpu")
+    model = whisper.load_model(selected_model, device="cpu")
 
-    # Transcribe and fine-tune
     result = whisper.transcribe(
         model,
         audio,
@@ -54,14 +62,11 @@ def transcribe_audio_thread(audio_path, on_transcription_completed, transcriptio
         trust_whisper_timestamps=False
     )
 
-    # Create TextGrid
     tg = tgt.TextGrid()
 
-    # Create Sentences and Word tiers
     sentences_tier = tgt.IntervalTier(start_time=0, end_time=result["segments"][-1]["end"], name="phrase")
     word_tier = tgt.IntervalTier(start_time=0, end_time=result["segments"][-1]["end"], name="mot")
 
-    # Create intervals and add them to the tier
     for segment in result["segments"]:
         interval = tgt.Interval(start_time=float(segment["start"]), end_time=float(segment["end"]), text=segment["text"])
         sentences_tier.add_interval(interval)
@@ -71,48 +76,42 @@ def transcribe_audio_thread(audio_path, on_transcription_completed, transcriptio
             interval = tgt.Interval(start_time=float(word["start"]), end_time=float(word["end"]), text=word["text"])
             word_tier.add_interval(interval)
 
-    # Add Tier to TextGrid
     tg.add_tier(sentences_tier)
     tg.add_tier(word_tier)
 
-    # Determine the output file name based on the input audio file name
     input_file_name = os.path.basename(audio_path)
     output_file_name = os.path.splitext(input_file_name)[0] + ".TextGrid"
     output_path = os.path.join(os.path.dirname(audio_path), output_file_name)
 
-    # Write TextGrid
     tgt.write_to_file(tg, output_path, format='short')
 
-     # Notify that transcription is complete
-    notify_transcription_complete(audio_path)
-
-      # Check if all threads have completed
     if all(not thread.is_alive() for thread in transcription_threads):
-        # All transcriptions are complete, call the completion callback
         on_transcription_completed()
 
-def notify_transcription_complete(audio_path):
-    # Update the GUI to notify the user that transcription is complete
-    audio_listbox.selection_clear(0, tk.END)
-    audio_listbox.insert(tk.END, f"Transcription complete: {audio_path}")
-    audio_listbox.see(tk.END)
-
-# Create the main application window
 app = tk.Tk()
+
+sv_ttk.set_theme("light")
+
 app.title("WhispGrid")
 
-# Create labels and entry fields
-audio_label = tk.Label(app, text="Select Audio Files:")
+audio_label = ttk.Label(app, text="Select Audio Files:")
 audio_label.pack()
 
 audio_listbox = tk.Listbox(app, selectmode=tk.MULTIPLE, width=100)
 audio_listbox.pack()
 
-# Create buttons
-select_button = tk.Button(app, text="Select Audio Files", command=select_audio_files)
+model_label = ttk.Label(app, text="Select or Enter a Model:")
+model_label.pack()
+
+model_var = StringVar(app)
+model_var.set(predefined_models[0])
+model_option_menu = OptionMenu(app, model_var, *predefined_models, "other")
+model_option_menu.pack()
+
+select_button = ttk.Button(app, text="Select Audio Files", command=select_audio_files)
 select_button.pack()
 
-transcribe_button = tk.Button(app, text="Transcribe", command=transcribe_audios)
+transcribe_button = ttk.Button(app, text="Transcribe", command=transcribe_audios)
 transcribe_button.pack()
 
 app.mainloop()
