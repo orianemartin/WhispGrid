@@ -2,10 +2,12 @@ import whisper_timestamped as whisper
 import tgt
 import json
 import tkinter as tk
-from tkinter import filedialog, StringVar, OptionMenu, messagebox, ttk, Entry
+from tkinter import filedialog, StringVar, OptionMenu, messagebox, ttk, Entry, simpledialog
 from tkinter.simpledialog import askstring
+from tktooltip import ToolTip
 import sv_ttk
 import os
+import time
 
 import threading
 import datetime
@@ -31,6 +33,7 @@ import numpy as np
 predefined_models = ["small", "base", "medium", "large", "bofenghuang/whisper-medium-french"]
 predefined_languages = ["en", "fr", "es", "de"]
 num_speakers = 0 
+initials = []
 
 
 def select_audio_files():
@@ -39,6 +42,7 @@ def select_audio_files():
         audio_listbox.insert(tk.END, file_path)
 
 def transcribe_audios():
+    start_time = time.time() 
     selected_files = audio_listbox.get(0, tk.END)
     selected_model = model_var.get()
     selected_language = language_var.get()
@@ -63,11 +67,26 @@ def transcribe_audios():
             return
         selected_language = custom_language
 
+    for i in range(0, num_speakers):
+        initial = simpledialog.askstring("Speaker Name or Initials", f"Enter Name or Initials for Speaker {i + 1}:")
+        if initial is None:
+            return
+        initials.append(initial)
+
 
     transcribe_button.config(state=tk.DISABLED)
 
+    def format_time(seconds):
+        # Convert seconds to hours, minutes, and seconds
+        m, s = divmod(seconds, 60)
+        h, m = divmod(m, 60)
+        return f"{int(h):02d}:{int(m):02d}:{int(s):02d}"
+
     def on_transcription_completed():
-        messagebox.showinfo("Transcription Complete", "Batch transcription complete")
+        end_time = time.time()
+        elapsed_time = end_time - start_time  # Calculate the elapsed time
+        formatted_time = format_time(elapsed_time)
+        messagebox.showinfo("Transcription Complete", f"Batch transcription complete\nElapsed Time: {formatted_time}")
         audio_listbox.see(tk.END)
         audio_listbox.delete(0, tk.END)
         transcribe_button.config(state=tk.NORMAL)
@@ -89,10 +108,6 @@ def transcribe_audios():
 def transcribe_audio_thread(audio_path, selected_model, on_transcription_completed, transcription_threads, selected_language, num_speakers):
     
     original_file_name, original_file_ext = os.path.splitext(os.path.basename(audio_path))
-
-    if audio_path[-3:] != 'wav':
-        subprocess.call(['ffmpeg', '-i', audio_path, f'{original_file_name}.wav', '-y'])
-        audio_path = f'{original_file_name}.wav'
 
     audio = whisper.load_audio(audio_path)
 
@@ -128,6 +143,10 @@ def transcribe_audio_thread(audio_path, selected_model, on_transcription_complet
 
     if int(num_speakers) > 1:
 
+        if audio_path[-3:] != 'wav':
+            subprocess.call(['ffmpeg', '-i', audio_path, f'{original_file_name}.wav', '-y'])
+            audio_path = f'{original_file_name}.wav'
+
         with contextlib.closing(wave.open(audio_path,'r')) as f:
             frames = f.getnframes()
             rate = f.getframerate()
@@ -153,7 +172,16 @@ def transcribe_audio_thread(audio_path, selected_model, on_transcription_complet
         labels = clustering.labels_
         for i in range(len(segments)):
             segments[i]["speaker"] = str(labels[i] + 1)
-            concatenated_text = f"{segments[i]['speaker']} {segments[i]['text']}"
+            try:
+                speaker_initial = initials[int(segments[i]["speaker"]) - 2]
+            except IndexError:
+                # Handle the case where the label is out of range
+                speaker_initial = "Unknown"
+            #speaker_initial = initials[labels[i] + 1]
+            #segments[i]["speaker"] = speaker_initial
+            #segments[i]["speaker"] = str(labels[i] + 1)
+
+            concatenated_text = f"{speaker_initial} {segments[i]['text']}"
             interval = tgt.Interval(start_time=float(segments[i]["start"]), end_time=float(segments[i]["end"]), text=concatenated_text)
             sentences_tier.add_interval(interval)
 
@@ -178,19 +206,24 @@ def transcribe_audio_thread(audio_path, selected_model, on_transcription_complet
 # App making
 
 app = tk.Tk()
+app.iconbitmap("audio-wave-32.ico")
 
 sv_ttk.set_theme("light")
 
 app.title("WhispGrid")
 
-audio_label = ttk.Label(app, text="Select Audio Files:")
+audio_label = ttk.Label(app, text="Selected Audio Files")
 audio_label.pack()
 
 audio_listbox = tk.Listbox(app, selectmode=tk.MULTIPLE, width=100)
 audio_listbox.pack()
 
+select_button = ttk.Button(app, text="Select Audio Files", command=select_audio_files)
+select_button.pack()
+
 model_label = ttk.Label(app, text="Select or Enter a Model:")
 model_label.pack()
+ToolTip(model_label, msg="Open Ai Whisper Model or custom Model. Please note that diarization seems to work only with Whisper's models.")
 
 
 model_var = StringVar(app)
@@ -202,6 +235,8 @@ model_option_menu.pack()
 
 language_label = ttk.Label(app, text="Select or Enter a Language:")
 language_label.pack()
+ToolTip(language_label, msg="Please use the initials of the language as defined in Whisper's API.")
+
 
 language_var = StringVar(app)
 language_var.set(predefined_languages[0])
@@ -212,12 +247,11 @@ language_option_menu.pack()
 
 speaker_label = ttk.Label(app, text="Enter the Number of Speakers:")
 speaker_label.pack()
+ToolTip(speaker_label, msg="You will then be asked for speakers' names. If there is only one speaker, no diarization will be performed.")
+
 
 speaker_entry = Entry(app)
 speaker_entry.pack()
-
-select_button = ttk.Button(app, text="Select Audio Files", command=select_audio_files)
-select_button.pack()
 
 transcribe_button = ttk.Button(app, text="Transcribe", command=transcribe_audios)
 transcribe_button.pack()
