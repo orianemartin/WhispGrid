@@ -35,6 +35,8 @@ predefined_languages = ["en", "fr", "es", "de"]
 num_speakers = 0 
 initials = []
 
+st = time.process_time()
+
 
 def select_audio_files():
     file_paths = filedialog.askopenfilenames(filetypes=[("Audio files", "*.wav;*.mp3;*.mp4;*.mpeg;*.mpga;*.m4a;*.webm;*.flac;*.ogg")])
@@ -86,10 +88,14 @@ def transcribe_audios():
         end_time = time.time()
         elapsed_time = end_time - start_time  # Calculate the elapsed time
         formatted_time = format_time(elapsed_time)
-        messagebox.showinfo("Transcription Complete", f"Batch transcription complete\nElapsed Time: {formatted_time}")
+        et = time.process_time()
+        res = et - st
+        messagebox.showinfo("Transcription Complete", f"Batch transcription complete\nElapsed Time: {formatted_time} \nCPU execution time: {res} seconds")
         audio_listbox.see(tk.END)
         audio_listbox.delete(0, tk.END)
         transcribe_button.config(state=tk.NORMAL)
+        
+
 
     transcription_threads = []
     for audio_path in selected_files:
