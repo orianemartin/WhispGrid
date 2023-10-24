@@ -1,4 +1,5 @@
 import whisper_timestamped as whisper
+from whisper.tokenizer import get_tokenizer
 import tgt
 import json
 import tkinter as tk
@@ -30,7 +31,7 @@ import contextlib
 from sklearn.cluster import AgglomerativeClustering
 import numpy as np
 
-predefined_models = ["small", "base", "medium", "large", "bofenghuang/whisper-medium-french"]
+predefined_models = ["base", "small", "medium", "large", "bofenghuang/whisper-medium-french"]
 predefined_languages = ["en", "fr", "es", "de"]
 num_speakers = 0 
 initials = []
@@ -94,12 +95,10 @@ def transcribe_audios():
         audio_listbox.see(tk.END)
         audio_listbox.delete(0, tk.END)
         transcribe_button.config(state=tk.NORMAL)
-        
-
 
     transcription_threads = []
     for audio_path in selected_files:
-        transcription_thread = threading.Thread(target=transcribe_audio_thread, args=(audio_path, selected_model, on_transcription_completed, transcription_threads, selected_language, int(num_speakers)))
+        transcription_thread = threading.Thread(target=transcribe_audio_thread, args=(audio_path, selected_model, on_transcription_completed, transcription_threads, selected_language, int(num_speakers), numspell_checkbox_var))
         transcription_threads.append(transcription_thread)
         transcription_thread.start()
 
@@ -111,23 +110,48 @@ def transcribe_audios():
 
     check_transcription_completion()
 
-def transcribe_audio_thread(audio_path, selected_model, on_transcription_completed, transcription_threads, selected_language, num_speakers):
+def transcribe_audio_thread(audio_path, selected_model, on_transcription_completed, transcription_threads, selected_language, num_speakers, numspell_checkbox_var):
     
     original_file_name, original_file_ext = os.path.splitext(os.path.basename(audio_path))
 
     audio = whisper.load_audio(audio_path)
+    
+    if numspell_checkbox_var.get():
+    
+        tokenizer = get_tokenizer(multilingual=True)
+        number_tokens = [
+            i 
+            for i in range(tokenizer.eot)
+            if all(c in "0123456789" for c in tokenizer.decode([i]).strip())
+        ]
 
-    model = whisper.load_model(selected_model, device="cpu")
+        model = whisper.load_model(selected_model, device="cpu")
 
-    result = whisper.transcribe(
-        model,
-        audio,
-        language=selected_language,
-        beam_size=5,
-        best_of=5,
-        temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-        trust_whisper_timestamps=False
-    )
+        result = whisper.transcribe(
+            model,
+            audio,
+            language=selected_language,
+            beam_size=5,
+            best_of=5,
+            temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            trust_whisper_timestamps=False,
+            suppress_tokens=[-1] + number_tokens,
+        )
+    
+    else:
+        
+        model = whisper.load_model(selected_model, device="cpu")
+
+        result = whisper.transcribe(
+            model,
+            audio,
+            language=selected_language,
+            beam_size=5,
+            best_of=5,
+            temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            trust_whisper_timestamps=False
+        )
+    
 
     segments = result["segments"]
     previous_end_time = 0.0
@@ -258,6 +282,10 @@ ToolTip(speaker_label, msg="You will then be asked for speakers' names. If there
 
 speaker_entry = Entry(app)
 speaker_entry.pack()
+
+numspell_checkbox_var = tk.BooleanVar()
+numspell_checkbox = ttk.Checkbutton(app, text="Spell out numbers", variable=numspell_checkbox_var)
+numspell_checkbox.pack()
 
 transcribe_button = ttk.Button(app, text="Transcribe", command=transcribe_audios)
 transcribe_button.pack()
