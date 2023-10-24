@@ -12,6 +12,7 @@ WhispGrid supports diarization based on [Riteshhere](https://github.com/riteshhe
 - Model Choice
 - Diarization (choice of number of speakers)
 - Choose how diarization is displayed (initials of speakers, full name, number, etc.)
+- Choose to spell out numbers or not
 
 ## Limitations
 
